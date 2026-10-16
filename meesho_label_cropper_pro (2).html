@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meesho Label Cropper Pro</title>
+
+    <!-- Web App Manifest for PWA Support -->
+    <link rel="manifest" id="manifestPlaceholder">
+    <meta name="theme-color" content="#ea580c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Label Cropper">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/ea580c/ffffff?text=📦">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #ff5a1f;
+            background: rgba(255, 90, 31, 0.15);
+            cursor: move;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #ff5a1f;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            z-index: 20;
+        }
+
+        .handle-tl { top: -6px; left: -6px; cursor: nwse-resize; }
+        .handle-tr { top: -6px; right: -6px; cursor: nesw-resize; }
+        .handle-bl { bottom: -6px; left: -6px; cursor: nesw-resize; }
+        .handle-br { bottom: -6px; right: -6px; cursor: nwse-resize; }
+        .handle-t  { top: -6px; left: calc(50% - 6px); cursor: ns-resize; }
+        .handle-b  { bottom: -6px; left: calc(50% - 6px); cursor: ns-resize; }
+        .handle-l  { top: calc(50% - 6px); left: -6px; cursor: ew-resize; }
+        .handle-r  { top: calc(50% - 6px); right: -6px; cursor: ew-resize; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center space-x-3">
+                <div class="bg-orange-600 text-white p-2 rounded-xl shadow-md font-bold text-xl">
+                    📦
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 leading-tight">Meesho Label Cropper Pro</h1>
+                    <p class="text-xs text-slate-500">Fast batch PDF shipping label cropper & 4-in-1 A4 Grid generator</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="installAppBtn" class="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 animate-pulse">
+                    <span>📲</span> Install App
+                </button>
+
+                <div id="fileInfoBadge" class="hidden text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full font-medium border border-slate-200">
+                    📄 <span id="fileNameDisplay">file.pdf</span> (<span id="pageCountDisplay">0</span> pages)
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 w-full flex-grow">
+        
+        <!-- Modal Container -->
+        <div id="modalBox" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center">
+                <div id="modalIcon" class="text-4xl mb-3">⚠️</div>
+                <h3 id="modalTitle" class="text-lg font-bold text-slate-900 mb-1">Notice</h3>
+                <p id="modalMessage" class="text-sm text-slate-600 mb-6">Message goes here.</p>
+                <button onclick="closeModal()" class="w-full bg-orange-600 text-white py-2.5 rounded-xl font-semibold hover:bg-orange-700 transition shadow-lg shadow-orange-600/20">OK</button>
+            </div>
+        </div>
+
+        <!-- AI Assistant Drawer Modal -->
+        <div id="aiDrawer" class="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-200">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">✨</span>
+                    <h3 class="font-bold text-sm">Gemini Shipping Assistant & OCR</h3>
+                </div>
+                <button onclick="toggleAiDrawer()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+            </div>
+            <div class="flex-grow p-4 overflow-y-auto space-y-4 bg-slate-50 text-xs" id="aiChatContent">
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-1">
+                    <p class="font-bold text-slate-900">👋 Hello! I am your Gemini Label AI.</p>
+                    <p class="text-slate-600">Once you crop a label or load a PDF, I can analyze addresses, extract order details, check delivery pincodes, or draft customer support responses!</p>
+                </div>
+            </div>
+            <div class="p-3 bg-white border-t border-slate-200 flex gap-2">
+                <input type="text" id="aiPromptInput" placeholder="Ask Gemini about the label or shipping..." class="flex-grow text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:border-orange-500">
+                <button id="aiSendBtn" class="bg-orange-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-orange-700 transition">Send</button>
+            </div>
+        </div>
+
+        <div id="uploadSection" class="max-w-2xl mx-auto mt-8">
+            <div id="dropZone" class="border-2 border-dashed border-slate-300 bg-white rounded-3xl p-10 text-center hover:border-orange-500 transition cursor-pointer shadow-sm relative group">
+                <input type="file" id="pdfInput" accept="application/pdf" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                <div class="w-16 h-16 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl group-hover:scale-110 transition">
+                    📁
+                </div>
+                <h2 class="text-lg font-bold text-slate-900 mb-1">Upload Meesho Shipping Label PDF</h2>
+                <p class="text-sm text-slate-500 mb-6">Drag and drop your PDF here, or click to browse</p>
+                <span class="inline-block bg-orange-600 text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-md shadow-orange-600/20 group-hover:bg-orange-700 transition">
+                    Select PDF File
+                </span>
+            </div>
+            
+            <div class="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs flex items-center gap-3 shadow-sm">
+                <span class="text-2xl">⚡</span>
+                <div>
+                    <strong class="font-semibold block mb-0.5 text-amber-950">Features Included:</strong>
+                    Auto-crop labels, 4-in-1 A4 sheet grid output, 4x6 thermal printer mode, and automatic "Tax Invoice" text detection!
+                </div>
+            </div>
+        </div>
+
+        <div id="workspaceSection" class="hidden grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <div class="lg:col-span-1 space-y-4">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
+                    <h3 class="font-bold text-slate-900 text-sm uppercase tracking-wider">Controls & Options</h3>
+                    
+                    <!-- Output Layout Selector -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-600 block">Print Page Format</label>
+                        <select id="outputLayoutSelect" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-medium text-slate-800 focus:outline-none focus:border-orange-500">
+                            <option value="a4_4in1" selected>A4 Grid (4 Labels per Sheet)</option>
+                            <option value="thermal_4x6">4x6 Thermal Roll Label Format</option>
+                            <option value="single_full">Single Label per Page (100% Size)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-500 block mb-1">Crop Mode</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="toggleAutoDetectBtn" class="bg-orange-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-orange-700 transition">
+                                🤖 Auto Detect
+                            </button>
+                            <button id="toggleSelectModeBtn" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold hover:bg-slate-900 transition">
+                                ✏️ Manual Box
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button id="autoSelectPresetBtn" class="w-full bg-orange-50 text-orange-700 border border-orange-200 py-2 rounded-xl text-xs font-bold hover:bg-orange-100 transition flex items-center justify-center gap-2">
+                            <span>⚡</span> Reset Top Meesho Label Box
+                        </button>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-500 block mb-1">Selection Status</label>
+                        <div id="selectionStatusBadge" class="text-xs font-medium px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span id="statusText">Auto-detection ready</span>
+                        </div>
+                    </div>
+
+                    <!-- Label Margin Control -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-semibold text-slate-500">Label Margin Padding</label>
+                            <span id="marginDisplayValue" class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">15 px</span>
+                        </div>
+                        <input type="range" id="marginRange" min="0" max="60" value="15" class="w-full accent-orange-600 cursor-pointer">
+                    </div>
+
+                    <!-- Zoom Controls -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <label class="text-xs font-semibold text-slate-500 block mb-2">Zoom Viewer</label>
+                        <div class="flex items-center gap-2">
+                            <button id="zoomOutBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-bold text-sm transition">- 50%</button>
+                            <span id="zoomLevelDisplay" class="text-xs font-bold text-slate-600 w-12 text-center">150%</span>
+                            <button id="zoomInBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-bold text-sm transition">+ 50%</button>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-100 space-y-2">
+                        <button id="cropBtn" class="w-full bg-orange-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-orange-700 transition shadow-md shadow-orange-600/20">
+                            ✂️ Crop & Generate Output PDF
+                        </button>
+
+                        <button id="aiAnalyzeBtn" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-semibold text-sm hover:from-purple-700 hover:to-indigo-700 transition shadow-md shadow-purple-600/20 flex items-center justify-center gap-2">
+                            <span>✨</span> Analyze Label with Gemini AI
+                        </button>
+
+                        <button id="downloadBtn" class="hidden w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2">
+                            <span>⬇️</span> Download PDF
+                        </button>
+
+                        <button id="resetBtn" class="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-semibold text-sm hover:bg-slate-200 transition">
+                            🔄 Upload New File
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Box -->
+                <div id="progressBox" class="hidden bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-3">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span id="progressText" class="text-slate-700">Processing...</span>
+                        <span id="progressPercent" class="text-orange-600">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div id="progressBar" class="bg-orange-600 h-full w-0 transition-all duration-200"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas View Box -->
+            <div class="lg:col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 flex flex-col">
+                <div class="w-full flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Live PDF Label Preview</span>
+                    <span id="scaleIndicator" class="text-xs font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg">Zoom: 150%</span>
+                </div>
+
+                <div id="scrollContainer" class="relative overflow-auto h-[650px] w-full flex justify-center items-start bg-slate-100 rounded-xl p-6 border border-slate-200 shadow-inner">
+                    <div id="canvasWrapper" class="relative inline-block shadow-2xl bg-white">
+                        <canvas id="pdfCanvas" class="block rounded"></canvas>
+                        
+                        <!-- Dynamic Crop Box with Handles -->
+                        <div id="selection" class="selection-box hidden">
+                            <div class="resize-handle handle-tl" data-handle="tl"></div>
+                            <div class="resize-handle handle-t"  data-handle="t"></div>
+                            <div class="resize-handle handle-tr" data-handle="tr"></div>
+                            <div class="resize-handle handle-r"  data-handle="r"></div>
+                            <div class="resize-handle handle-br" data-handle="br"></div>
+                            <div class="resize-handle handle-b"  data-handle="b"></div>
+                            <div class="resize-handle handle-bl" data-handle="bl"></div>
+                            <div class="resize-handle handle-l"  data-handle="l"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <footer class="text-center py-6 text-xs text-slate-400 border-t border-slate-200 mt-12 bg-white">
+        Meesho Label Cropper Pro &bull; PWA Installed Application &bull; 100% Client-side Secure Processing
+    </footer>
+
+    <script>
+        // Modal Helper Functions
+        function showModal(title, message, icon = '⚠️') {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerText = message;
+            document.getElementById('modalIcon').innerText = icon;
+            document.getElementById('modalBox').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modalBox').classList.add('hidden');
+        }
+
+        function toggleAiDrawer() {
+            const drawer = document.getElementById('aiDrawer');
+            drawer.classList.toggle('translate-x-full');
+        }
+
+        const manifestData = {
+            "name": "Meesho Label Cropper Pro",
+            "short_name": "Label Cropper",
+            "start_url": "./",
+            "display": "standalone",
+            "background_color": "#f8fafc",
+            "theme_color": "#ea580c",
+            "icons": [{
+                "src": "https://placehold.co/192x192/ea580c/ffffff?text=📦",
+                "sizes": "192x192",
+                "type": "image/png"
+            }]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
+        document.getElementById('manifestPlaceholder').setAttribute('href', URL.createObjectURL(manifestBlob));
+
+        let deferredPrompt;
+        const installAppBtn = document.getElementById('installAppBtn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installAppBtn.classList.remove('hidden');
+        });
+
+        installAppBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    showModal("App Installed!", "Aapki Meesho Label Cropper Pro App successfully install ho chuki hai.");
+                }
+                deferredPrompt = null;
+            } else {
+                showModal("Install App", "PWA Install: Browser menu par click karke 'Add to Home Screen' ya 'Install App' par click karein.");
+            }
+        });
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+        const pdfInput = document.getElementById("pdfInput");
+        const uploadSection = document.getElementById("uploadSection");
+        const workspaceSection = document.getElementById("workspaceSection");
+        const fileInfoBadge = document.getElementById("fileInfoBadge");
+        const fileNameDisplay = document.getElementById("fileNameDisplay");
+        const pageCountDisplay = document.getElementById("pageCountDisplay");
+        
+        const canvas = document.getElementById("pdfCanvas");
+        const ctx = canvas.getContext("2d");
+        const wrapper = document.getElementById("canvasWrapper");
+        const selection = document.getElementById("selection");
+
+        const cropBtn = document.getElementById("cropBtn");
+        const downloadBtn = document.getElementById("downloadBtn");
+        const resetBtn = document.getElementById("resetBtn");
+        const toggleSelectModeBtn = document.getElementById("toggleSelectModeBtn");
+        const toggleAutoDetectBtn = document.getElementById("toggleAutoDetectBtn");
+        const autoSelectPresetBtn = document.getElementById("autoSelectPresetBtn");
+        const outputLayoutSelect = document.getElementById("outputLayoutSelect");
+        
+        const aiAnalyzeBtn = document.getElementById("aiAnalyzeBtn");
+        const aiDrawer = document.getElementById("aiDrawer");
+        const aiChatContent = document.getElementById("aiChatContent");
+        const aiPromptInput = document.getElementById("aiPromptInput");
+        const aiSendBtn = document.getElementById("aiSendBtn");
+
+        const zoomInBtn = document.getElementById("zoomInBtn");
+        const zoomOutBtn = document.getElementById("zoomOutBtn");
+        const zoomLevelDisplay = document.getElementById("zoomLevelDisplay");
+        const scaleIndicator = document.getElementById("scaleIndicator");
+        const marginRange = document.getElementById("marginRange");
+        const marginDisplayValue = document.getElementById("marginDisplayValue");
+
+        const progressBox = document.getElementById("progressBox");
+        const progressBar = document.getElementById("progressBar");
+        const progressPercent = document.getElementById("progressPercent");
+        const progressText = document.getElementById("progressText");
+        const selectionStatusBadge = document.getElementById("selectionStatusBadge");
+        const statusText = document.getElementById("statusText");
+
+        let pdfDoc = null;
+        let pdfBytesData = null;
+        let currentPage = null;
+        let currentScale = 1.5;
+        let cropArea = null;
+        let outputPDF = null;
+        let lastCroppedImageBase64 = null;
+        let useAutoDetect = true;
+
+        marginRange.addEventListener("input", (e) => {
+            marginDisplayValue.innerText = `${e.target.value} px`;
+        });
+
+        function renderSelectionBox() {
+            if (!cropArea) return;
+            selection.classList.remove("hidden");
+            selection.style.left = `${cropArea.x}px`;
+            selection.style.top = `${cropArea.y}px`;
+            selection.style.width = `${cropArea.width}px`;
+            selection.style.height = `${cropArea.height}px`;
+        }
+
+        let isDragging = false;
+        let isResizing = false;
+        let currentHandle = null;
+        let startX, startY;
+        let startCrop;
+
+        function getPointerPos(e) {
+            const rect = wrapper.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        selection.addEventListener('mousedown', startDragOrResize);
+        selection.addEventListener('touchstart', startDragOrResize, { passive: false });
+
+        function startDragOrResize(e) {
+            if (useAutoDetect) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const handle = e.target.getAttribute('data-handle');
+            if (handle) {
+                isResizing = true;
+                currentHandle = handle;
+            } else {
+                isDragging = true;
+            }
+
+            const pos = getPointerPos(e);
+            startX = pos.x;
+            startY = pos.y;
+            startCrop = { ...cropArea };
+
+            window.addEventListener('mousemove', onDragOrResize);
+            window.addEventListener('touchmove', onDragOrResize, { passive: false });
+            window.addEventListener('mouseup', stopDragOrResize);
+            window.addEventListener('touchend', stopDragOrResize);
+        }
+
+        function onDragOrResize(e) {
+            if (!isDragging && !isResizing) return;
+            e.preventDefault();
+
+            const pos = getPointerPos(e);
+            const dx = pos.x - startX;
+            const dy = pos.y - startY;
+
+            let newX = startCrop.x;
+            let newY = startCrop.y;
+            let newW = startCrop.width;
+            let newH = startCrop.height;
+
+            if (isDragging) {
+                newX = Math.max(0, Math.min(canvas.width - newW, startCrop.x + dx));
+                newY = Math.max(0, Math.min(canvas.height - newH, startCrop.y + dy));
+            } else if (isResizing) {
+                const minSize = 40;
+                if (currentHandle.includes('r')) {
+                    newW = Math.max(minSize, Math.min(canvas.width - startCrop.x, startCrop.width + dx));
+                }
+                if (currentHandle.includes('b')) {
+                    newH = Math.max(minSize, Math.min(canvas.height - startCrop.y, startCrop.height + dy));
+                }
+                if (currentHandle.includes('l')) {
+                    const maxDx = startCrop.width - minSize;
+                    const validDx = Math.min(dx, maxDx);
+                    newX = Math.max(0, startCrop.x + validDx);
+                    newW = startCrop.width - (newX - startCrop.x);
+                }
+                if (currentHandle.includes('t')) {
+                    const maxDy = startCrop.height - minSize;
+                    const validDy = Math.min(dy, maxDy);
+                    newY = Math.max(0, startCrop.y + validDy);
+                    newH = startCrop.height - (newY - startCrop.y);
+                }
+            }
+
+            cropArea = { x: newX, y: newY, width: newW, height: newH };
+            renderSelectionBox();
+            statusText.innerText = `Box position: X:${Math.round(newX)} Y:${Math.round(newY)} W:${Math.round(newW)} H:${Math.round(newH)}`;
+        }
+
+        function stopDragOrResize() {
+            isDragging = false;
+            isResizing = false;
+            currentHandle = null;
+            window.removeEventListener('mousemove', onDragOrResize);
+            window.removeEventListener('touchmove', onDragOrResize);
+            window.removeEventListener('mouseup', stopDragOrResize);
+            window.removeEventListener('touchend', stopDragOrResize);
+        }
+
+        autoSelectPresetBtn.addEventListener("click", () => {
+            if (!canvas.width || !canvas.height) return;
+            useAutoDetect = false;
+            cropArea = {
+                x: canvas.width * 0.04,
+                y: canvas.height * 0.03,
+                width: canvas.width * 0.92,
+                height: canvas.height * 0.45
+            };
+            renderSelectionBox();
+            statusText.innerText = "Preset applied (Top 45% Label)";
+        });
+
+        toggleAutoDetectBtn.addEventListener("click", () => {
+            useAutoDetect = true;
+            selection.classList.add("hidden");
+            statusText.innerText = "Auto Boundary Detection Mode Active";
+        });
+
+        toggleSelectModeBtn.addEventListener("click", () => {
+            useAutoDetect = false;
+            if (!cropArea) {
+                cropArea = {
+                    x: canvas.width * 0.05,
+                    y: canvas.height * 0.04,
+                    width: canvas.width * 0.90,
+                    height: canvas.height * 0.45
+                };
+            }
+            renderSelectionBox();
+            statusText.innerText = "Manual Crop Selection Active (Drag/Resize Box)";
+        });
+
+        async function renderPDFPage(pageNumber) {
+            currentPage = await pdfDoc.getPage(pageNumber);
+            const viewport = currentPage.getViewport({ scale: currentScale });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            await currentPage.render(renderContext).promise;
+
+            if (useAutoDetect) {
+                const autoHeight = await detectTaxInvoiceBoundary(currentPage, viewport);
+                cropArea = {
+                    x: canvas.width * 0.03,
+                    y: canvas.height * 0.02,
+                    width: canvas.width * 0.94,
+                    height: autoHeight
+                };
+            }
+        }
+
+        async function detectTaxInvoiceBoundary(pdfPage, viewport) {
+            try {
+                const textContent = await pdfPage.getTextContent();
+                for (const item of textContent.items) {
+                    if (item.str.toLowerCase().includes("tax invoice")) {
+                        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                        const invoiceY = tx[5];
+                        if (invoiceY > 50 && invoiceY < viewport.height) {
+                            return Math.max(invoiceY - 15, viewport.height * 0.35);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Text detection error:", err);
+            }
+            return viewport.height * 0.46; // fallback
+        }
+
+        pdfInput.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file || file.type !== "application/pdf") {
+                showModal("Invalid File", "Please upload a valid PDF shipping label file.");
+                return;
+            }
+
+            const arrayBuffer = await file.arrayBuffer();
+            pdfBytesData = new Uint8Array(arrayBuffer);
+            pdfDoc = await pdfjsLib.getDocument({ data: pdfBytesData }).promise;
+
+            fileNameDisplay.innerText = file.name;
+            pageCountDisplay.innerText = pdfDoc.numPages;
+            fileInfoBadge.classList.remove("hidden");
+
+            uploadSection.classList.add("hidden");
+            workspaceSection.classList.remove("hidden");
+
+            await renderPDFPage(1);
+        });
+
+        zoomInBtn.addEventListener("click", async () => {
+            if (currentScale < 3.0 && pdfDoc) {
+                currentScale += 0.25;
+                zoomLevelDisplay.innerText = `${Math.round(currentScale * 100)}%`;
+                scaleIndicator.innerText = `Zoom: ${Math.round(currentScale * 100)}%`;
+                await renderPDFPage(1);
+                if (!useAutoDetect && cropArea) renderSelectionBox();
+            }
+        });
+
+        zoomOutBtn.addEventListener("click", async () => {
+            if (currentScale > 0.5 && pdfDoc) {
+                currentScale -= 0.25;
+                zoomLevelDisplay.innerText = `${Math.round(currentScale * 100)}%`;
+                scaleIndicator.innerText = `Zoom: ${Math.round(currentScale * 100)}%`;
+                await renderPDFPage(1);
+                if (!useAutoDetect && cropArea) renderSelectionBox();
+            }
+        });
+
+        cropBtn.addEventListener("click", async () => {
+            if (!pdfDoc) return;
+
+            progressBox.classList.remove("hidden");
+            progressBar.style.width = "0%";
+            progressPercent.innerText = "0%";
+            progressText.innerText = "Processing labels...";
+
+            const { jsPDF } = window.jspdf;
+            const layoutMode = outputLayoutSelect.value;
+            const padding = parseInt(marginRange.value);
+
+            let doc;
+            if (layoutMode === "thermal_4x6") {
+                doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [101.6, 152.4] });
+            } else {
+                doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+            }
+
+            const totalPages = pdfDoc.numPages;
+            let labelCountOnCurrentA4 = 0;
+
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const page = await pdfDoc.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2.0 });
+
+                const tempCanvas = document.createElement("canvas");
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                const tempCtx = tempCanvas.getContext("2d");
+
+                await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+
+                let cropH = viewport.height * 0.46;
+                if (useAutoDetect) {
+                    cropH = await detectTaxInvoiceBoundary(page, viewport);
+                } else if (cropArea) {
+                    const scaleFactor = 2.0 / currentScale;
+                    cropH = cropArea.height * scaleFactor;
+                }
+
+                const croppedCanvas = document.createElement("canvas");
+                const scaleFactor = 2.0 / currentScale;
+                const cropX = cropArea ? cropArea.x * scaleFactor : viewport.width * 0.03;
+                const cropY = cropArea ? cropArea.y * scaleFactor : viewport.height * 0.02;
+                const cropW = cropArea ? cropArea.width * scaleFactor : viewport.width * 0.94;
+
+                croppedCanvas.width = cropW;
+                croppedCanvas.height = cropH;
+
+                const croppedCtx = croppedCanvas.getContext("2d");
+                croppedCtx.drawImage(tempCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+                const imgData = croppedCanvas.toDataURL("image/jpeg", 0.92);
+                if (pageNum === 1) lastCroppedImageBase64 = imgData.split(',')[1];
+
+                // PDF Grid Layout Positioning Logic
+                if (layoutMode === "a4_4in1") {
+                    if (labelCountOnCurrentA4 === 4) {
+                        doc.addPage();
+                        labelCountOnCurrentA4 = 0;
+                    }
+                    const gridPos = [
+                        { x: 5, y: 5, w: 98, h: 140 },
+                        { x: 107, y: 5, w: 98, h: 140 },
+                        { x: 5, y: 150, w: 98, h: 140 },
+                        { x: 107, y: 150, w: 98, h: 140 }
+                    ];
+                    const pos = gridPos[labelCountOnCurrentA4];
+                    doc.addImage(imgData, "JPEG", pos.x, pos.y, pos.w, pos.h);
+                    labelCountOnCurrentA4++;
+
+                } else if (layoutMode === "thermal_4x6") {
+                    if (pageNum > 1) doc.addPage([101.6, 152.4]);
+                    doc.addImage(imgData, "JPEG", 2, 2, 97.6, 148.4);
+
+                } else {
+                    if (pageNum > 1) doc.addPage();
+                    doc.addImage(imgData, "JPEG", 10, 10, 190, 130);
+                }
+
+                const percent = Math.round((pageNum / totalPages) * 100);
+                progressBar.style.width = `${percent}%`;
+                progressPercent.innerText = `${percent}%`;
+            }
+
+            outputPDF = doc;
+            progressText.innerText = "Completed!";
+            downloadBtn.classList.remove("hidden");
+            showModal("Batch Crop Complete!", "Aapke Meesho shipping labels crop ho chuke hain! Download button par click karein.", "✅");
+        });
+
+        downloadBtn.addEventListener("click", () => {
+            if (outputPDF) {
+                outputPDF.save("Meesho_Cropped_Labels_Pro.pdf");
+            }
+        });
+
+        aiAnalyzeBtn.addEventListener("click", () => {
+            toggleAiDrawer();
+            if (lastCroppedImageBase64) {
+                callGeminiForLabelAnalysis(lastCroppedImageBase64);
+            }
+        });
+
+        function appendAiMessage(sender, text) {
+            const div = document.createElement("div");
+            div.className = sender === "User" ? "bg-orange-50 border border-orange-200 p-3 rounded-xl ml-6 space-y-1" : "bg-white border border-slate-200 p-3 rounded-xl mr-6 space-y-1 shadow-sm";
+            div.innerHTML = `<p class="font-bold text-slate-800">${sender}</p><p class="text-slate-600 whitespace-pre-wrap">${text}</p>`;
+            aiChatContent.appendChild(div);
+            aiChatContent.scrollTop = aiChatContent.scrollHeight;
+        }
+
+        async function callGeminiForLabelAnalysis(base64Data) {
+            appendAiMessage("Gemini AI", "Analyzing shipping label image...");
+            try {
+                const systemPrompt = "Extract key information from this Meesho shipping label including Order ID, SKU/Item names, Customer Name, Address, and Pincode. Format cleanly.";
+                const userQuery = "Extract the order details and shipping address from this label.";
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: userQuery },
+                            { inlineData: { mimeType: "image/jpeg", data: base64Data } }
+                        ]
+                    }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                aiChatContent.lastChild.remove();
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    appendAiMessage("Gemini AI", candidate.content.parts[0].text);
+                } else {
+                    appendAiMessage("Gemini AI", "Could not extract details from label.");
+                }
+            } catch (err) {
+                console.error(err);
+                aiChatContent.lastChild.remove();
+                appendAiMessage("Gemini AI", "Error connecting to Gemini API.");
+            }
+        }
+
+        resetBtn.addEventListener("click", function() {
+            pdfInput.value = "";
+            pdfDoc = null;
+            currentPage = null;
+            cropArea = null;
+            outputPDF = null;
+            lastCroppedImageBase64 = null;
+            currentScale = 1.5;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            selection.classList.add("hidden");
+            
+            workspaceSection.classList.add("hidden");
+            uploadSection.classList.remove("hidden");
+            fileInfoBadge.classList.add("hidden");
+            downloadBtn.classList.add("hidden");
+            progressBox.classList.add("hidden");
+            progressBar.style.width = "0%";
+        });
+    </script>
+</body>
+</html>
